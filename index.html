@@ -543,6 +543,7 @@ function renderHome(accts) {
   const active = accts.filter(a => a.open).sort((x, y) => Math.abs(y.net) - Math.abs(x.net) || (x.last < y.last ? 1 : -1));
   const settled = accts.filter(a => !a.open).sort((x, y) => (x.last < y.last ? 1 : -1));
   let h = '';
+  h += installNotice();
   if (!connected()) h += `<div class="notice"><p><b>Connect your Google Sheet.</b> Until then, changes stay on this phone.</p><button class="btn ghost small" data-act="settings">Connect</button></div>`;
   if (!accts.length) h += '<div class="empty"><b>No debts yet</b>Tap Add debt to record money you owe or money someone owes you.</div>';
   if (active.length) h += `<div class="sec-head"><span>Open accounts</span><small>${active.length}</small></div><ul class="list">${active.map(acctRow).join('')}</ul>`;
@@ -845,13 +846,30 @@ function init() {
     else if (b.dataset.h === 'sync') { if (!connected() || S.sync.error) openSettings(); else pull(); }
   });
   $('.xfab').addEventListener('click', () => openDebt());
-  const acts = { acct: b => openAccount(b.dataset.key), settings: () => openSettings() };
+  const acts = { acct: b => openAccount(b.dataset.key), settings: () => openSettings(), install: () => doInstall() };
   $('#main').addEventListener('click', e => { const b = e.target.closest('[data-act]'); if (b && acts[b.dataset.act]) acts[b.dataset.act](b); });
   document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && Date.now() - S.lastPull > 30000) pull(); });
   addEventListener('online', () => flush());
   renderAll(); paintSync();
   pull();
 }
+
+/* ---------- install button (uses Chrome's own install prompt) ---------- */
+let installPrompt = null;
+const standalone = () => matchMedia('(display-mode: standalone)').matches;
+const installNotice = () => installPrompt && !standalone()
+  ? `<div class="notice"><p><b>Install this app.</b> It gets its own icon and opens full screen.</p><button class="btn ghost small" data-act="install">Install</button></div>` : '';
+async function doInstall() {
+  if (!installPrompt) return;
+  const p = installPrompt;
+  installPrompt = null;
+  p.prompt();
+  try { await p.userChoice; } catch (e) {}
+  renderAll();
+}
+addEventListener('beforeinstallprompt', e => { e.preventDefault(); installPrompt = e; renderAll(); });
+addEventListener('appinstalled', () => { installPrompt = null; renderAll(); toast('Installed. Open it from your home screen.'); });
+
 init();
 // offline copy + installable app (sw.js sits next to this file; harmless if it is missing)
 if ('serviceWorker' in navigator && isSecureContext) navigator.serviceWorker.register('sw.js').catch(() => {});
